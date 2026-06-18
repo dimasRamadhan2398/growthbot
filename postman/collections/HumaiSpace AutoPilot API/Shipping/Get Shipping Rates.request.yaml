@@ -1,0 +1,17 @@
+$kind: http-request
+name: Get Shipping Rates
+method: POST
+url: '{{baseUrl}}/api/shipping/rates'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "city": "Jakarta",
+      "items": [
+        {"product_id": 1, "qty": 2, "price": 85000}
+      ]
+    }

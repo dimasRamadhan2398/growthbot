@@ -1,0 +1,5 @@
+$kind: http-request
+name: Delete Lead
+method: DELETE
+url: '{{baseUrl}}/api/leads/{{lead_id}}'
+order: 4000

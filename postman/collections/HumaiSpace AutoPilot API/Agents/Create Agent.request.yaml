@@ -1,0 +1,18 @@
+$kind: http-request
+name: Create Agent
+method: POST
+url: '{{baseUrl}}/api/agents'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Sales Bot",
+      "status": "active",
+      "messages": 0,
+      "channel": "WhatsApp",
+      "icon_name": "Bot"
+    }

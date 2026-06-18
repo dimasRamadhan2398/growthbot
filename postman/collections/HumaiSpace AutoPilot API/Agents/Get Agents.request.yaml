@@ -1,0 +1,5 @@
+$kind: http-request
+name: Get Agents
+method: GET
+url: '{{baseUrl}}/api/agents'
+order: 1000

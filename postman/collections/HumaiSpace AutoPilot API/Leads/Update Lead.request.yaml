@@ -1,0 +1,14 @@
+$kind: http-request
+name: Update Lead
+method: PUT
+url: '{{baseUrl}}/api/leads/{{lead_id}}'
+order: 3000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "column_name": "Qualified by AI"
+    }

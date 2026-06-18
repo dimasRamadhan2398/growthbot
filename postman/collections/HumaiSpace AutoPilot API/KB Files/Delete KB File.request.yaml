@@ -1,0 +1,5 @@
+$kind: http-request
+name: Delete KB File
+method: DELETE
+url: '{{baseUrl}}/api/kb-files/{{file_id}}'
+order: 3000

@@ -1,0 +1,25 @@
+$kind: http-request
+name: Create Order
+method: POST
+url: '{{baseUrl}}/api/orders'
+order: 3000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "store_slug": "urbanstyle-id",
+      "customer_name": "Budi Santoso",
+      "customer_phone": "08123456789",
+      "address": "Jl. Sudirman No. 10, Jakarta Pusat",
+      "city": "Jakarta",
+      "shipping_method": "JNE Reguler (REG)",
+      "shipping_courier": "JNE",
+      "shipping_cost": 9000,
+      "payment_method": "Transfer Bank",
+      "items": [
+        {"product_id": 1, "qty": 2, "price": 85000}
+      ]
+    }

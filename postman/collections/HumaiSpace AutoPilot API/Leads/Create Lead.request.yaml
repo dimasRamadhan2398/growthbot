@@ -1,0 +1,19 @@
+$kind: http-request
+name: Create Lead
+method: POST
+url: '{{baseUrl}}/api/leads'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Andi Wijaya",
+      "initials": "AW",
+      "source": "WhatsApp",
+      "value": "Rp 2.5M",
+      "time": "2 jam lalu",
+      "column_name": "New Lead"
+    }

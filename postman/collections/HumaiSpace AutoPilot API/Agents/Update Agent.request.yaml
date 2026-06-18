@@ -1,0 +1,15 @@
+$kind: http-request
+name: Update Agent
+method: PUT
+url: '{{baseUrl}}/api/agents/{{agent_id}}'
+order: 3000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "status": "paused",
+      "messages": 150
+    }

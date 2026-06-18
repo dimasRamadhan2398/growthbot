@@ -1,0 +1,16 @@
+$kind: http-request
+name: Create KB File
+method: POST
+url: '{{baseUrl}}/api/kb-files'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "product-catalog.pdf",
+      "size": "2.4 MB",
+      "date": "04 Jun 2026"
+    }

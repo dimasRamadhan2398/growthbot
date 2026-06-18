@@ -1,0 +1,5 @@
+$kind: http-request
+name: Get KB Files
+method: GET
+url: '{{baseUrl}}/api/kb-files'
+order: 1000

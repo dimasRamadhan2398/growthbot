@@ -1,0 +1,5 @@
+$kind: http-request
+name: Get Leads
+method: GET
+url: '{{baseUrl}}/api/leads'
+order: 1000

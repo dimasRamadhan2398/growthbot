@@ -1,0 +1,27 @@
+$kind: http-request
+name: Create Product
+method: POST
+url: '{{baseUrl}}/api/products'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Kaos Polos Premium",
+      "sku": "KPP-001",
+      "price": 85000,
+      "stock": 100,
+      "online": 50,
+      "status": "synced",
+      "img": null,
+      "rating": 0.0,
+      "sold": 0,
+      "category": "Tops",
+      "description": "Kaos polos premium bahan cotton combed 30s",
+      "ch_webstore": true,
+      "ch_reseller": true,
+      "ch_pos": true
+    }

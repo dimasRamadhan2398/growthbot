@@ -1,0 +1,7 @@
+$kind: collection
+name: HumaiSpace AutoPilot API
+description: API collection for the HumaiSpace AutoPilot platform — covers dashboard metrics, product catalog, orders, shipping rates, CRM leads, AI agents, and knowledge base files.
+variables:
+  - key: baseUrl
+    value: 'http://localhost:8000'
+    description: Base URL for the API server
