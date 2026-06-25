@@ -1,6 +1,67 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
+# --- Tenant ---
+class TenantBase(BaseModel):
+    id: str
+    name: str
+    subdomain: str
+    subscription_plan: str
+    is_active: bool = True
+    created_at: str
+
+class TenantCreate(TenantBase):
+    pass
+
+class TenantOut(TenantBase):
+    class Config:
+        from_attributes = True
+
+# --- Branch ---
+class BranchBase(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    manager_name: str
+    region: str
+    phone: str
+
+class BranchCreate(BranchBase):
+    pass
+
+class BranchOut(BranchBase):
+    class Config:
+        from_attributes = True
+
+# --- Outlet ---
+class OutletBase(BaseModel):
+    id: str
+    branch_id: str
+    tenant_id: str
+    name: str
+
+class OutletCreate(OutletBase):
+    pass
+
+class OutletOut(OutletBase):
+    class Config:
+        from_attributes = True
+
+# --- Inventory ---
+class InventoryBase(BaseModel):
+    outlet_id: str
+    product_id: int
+    stock: int = 0
+    online_stock: int = 0
+
+class InventoryCreate(InventoryBase):
+    pass
+
+class InventoryOut(InventoryBase):
+    id: int
+    class Config:
+        from_attributes = True
+
 # --- Category ---
 class CategoryBase(BaseModel):
     id: str
@@ -9,6 +70,7 @@ class CategoryBase(BaseModel):
     webstore: bool = True
     reseller: bool = True
     pos: bool = True
+    tenant_id: Optional[str] = None
 
 class CategoryCreate(CategoryBase):
     pass
@@ -27,6 +89,7 @@ class StoreBase(BaseModel):
     tagline: str
     is_reseller: bool = False
     markup: float = 0.0
+    tenant_id: Optional[str] = None
 
 class StoreCreate(StoreBase):
     pass
@@ -51,6 +114,7 @@ class ProductBase(BaseModel):
     ch_webstore: bool = True
     ch_reseller: bool = True
     ch_pos: bool = True
+    tenant_id: Optional[str] = None
 
 class ProductCreate(ProductBase):
     pass
@@ -130,6 +194,9 @@ class OrderBase(BaseModel):
     created_at: str
     payment_url: Optional[str] = None
     payment_token: Optional[str] = None
+    tenant_id: Optional[str] = None
+    branch_id: Optional[str] = None
+    outlet_id: Optional[str] = None
 
 class OrderCreate(BaseModel):
     store_slug: str
@@ -161,6 +228,7 @@ class LeadBase(BaseModel):
     value: str
     time: str
     column_name: str
+    tenant_id: Optional[str] = None
 
 class LeadCreate(LeadBase):
     pass
@@ -180,6 +248,7 @@ class AgentBase(BaseModel):
     messages: int = 0
     channel: str
     icon_name: str
+    tenant_id: Optional[str] = None
 
 class AgentCreate(AgentBase):
     pass
@@ -198,6 +267,7 @@ class KBFileBase(BaseModel):
     name: str
     size: str
     date: str
+    tenant_id: Optional[str] = None
 
 class KBFileCreate(KBFileBase):
     pass

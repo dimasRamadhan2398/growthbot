@@ -1,9 +1,14 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AppLayout from "./components/AppLayout.vue";
+import { updateTenantContext } from "./utils/tenant";
 
 const routes = [
   {
     path: "/",
+    redirect: "/Retail/branch_retail_1/outlet_retail_1"
+  },
+  {
+    path: "/:industry/:branch/:outlet",
     component: AppLayout,
     children: [
       {
@@ -73,6 +78,16 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+});
+
+router.beforeEach((to, from, next) => {
+  const { industry, branch, outlet } = to.params;
+  updateTenantContext({
+    industry: Array.isArray(industry) ? industry[0] : industry,
+    branch: Array.isArray(branch) ? branch[0] : branch,
+    outlet: Array.isArray(outlet) ? outlet[0] : outlet,
+  });
+  next();
 });
 
 export default router;

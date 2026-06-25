@@ -1,9 +1,9 @@
 import datetime
 import random
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from database import engine, Base, SessionLocal, get_db
 from seed import seed_data
@@ -23,6 +23,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_db():
+    # Recreate tables to apply schema modifications cleanly
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
@@ -32,6 +34,18 @@ def startup_db():
     finally:
         db.close()
 
+# --- Dependency Injection for Tenant Context ---
+def get_tenant_context(
+    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
+    x_branch_id: Optional[str] = Header(None, alias="X-Branch-ID"),
+    x_outlet_id: Optional[str] = Header(None, alias="X-Outlet-ID")
+):
+    return {
+        "tenant_id": x_tenant_id,
+        "branch_id": x_branch_id,
+        "outlet_id": x_outlet_id
+    }
+
 # --- Health check ---
 @app.get("/api/health")
 def health_check():
@@ -39,14 +53,22 @@ def health_check():
 
 # --- Dashboard API ---
 @app.get("/api/dashboard")
-def get_dashboard_data(db: Session = Depends(get_db)):
+def get_dashboard_data(db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    
     # Calculate metrics
-    agents_count = db.query(models.Agent).filter(models.Agent.status == "active").count()
-    agents = db.query(models.Agent).all()
+    agents_count = db.query(models.Agent).filter(
+        models.Agent.tenant_id == tenant_id,
+        models.Agent.status == "active"
+    ).count()
+    agents = db.query(models.Agent).filter(models.Agent.tenant_id == tenant_id).all()
     total_messages = sum(a.messages for a in agents)
 
-    # Let's count revenue from orders
-    paid_orders = db.query(models.Order).filter(models.Order.payment_status == "paid").all()
+    # Count revenue from orders
+    paid_orders = db.query(models.Order).filter(
+        models.Order.tenant_id == tenant_id,
+        models.Order.payment_status == "paid"
+    ).all()
     total_revenue = sum(o.total for o in paid_orders)
     
     # Human hours saved (mock calculation: 1 message = 3 minutes = 0.05 hours)
@@ -93,23 +115,34 @@ def get_dashboard_data(db: Session = Depends(get_db)):
 
 # --- Categories API ---
 @app.get("/api/categories", response_model=List[schemas.CategoryOut])
-def get_categories(db: Session = Depends(get_db)):
-    return db.query(models.Category).all()
+def get_categories(db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    return db.query(models.Category).filter(models.Category.tenant_id == tenant_id).all()
 
 @app.post("/api/categories", response_model=schemas.CategoryOut)
-def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db)):
-    db_cat = db.query(models.Category).filter(models.Category.id == category.id).first()
+def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    db_cat = db.query(models.Category).filter(
+        models.Category.id == category.id,
+        models.Category.tenant_id == tenant_id
+    ).first()
     if db_cat:
         raise HTTPException(status_code=400, detail="Category ID already exists")
+    
     new_cat = models.Category(**category.dict())
+    new_cat.tenant_id = tenant_id
     db.add(new_cat)
     db.commit()
     db.refresh(new_cat)
     return new_cat
 
 @app.delete("/api/categories/{cat_id}")
-def delete_category(cat_id: str, db: Session = Depends(get_db)):
-    db_cat = db.query(models.Category).filter(models.Category.id == cat_id).first()
+def delete_category(cat_id: str, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    db_cat = db.query(models.Category).filter(
+        models.Category.id == cat_id,
+        models.Category.tenant_id == tenant_id
+    ).first()
     if not db_cat:
         raise HTTPException(status_code=404, detail="Category not found")
     db.delete(db_cat)
@@ -118,64 +151,185 @@ def delete_category(cat_id: str, db: Session = Depends(get_db)):
 
 # --- Products API ---
 @app.get("/api/products", response_model=List[schemas.ProductOut])
-def get_products(db: Session = Depends(get_db)):
-    # Order by ID to keep consistent sorting
-    return db.query(models.Product).order_by(models.Product.id.asc()).all()
+def get_products(db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    outlet_id = tenant_ctx["outlet_id"]
+    
+    # Fallback to the first outlet of the tenant if X-Outlet-ID is not provided
+    if not outlet_id:
+        first_outlet = db.query(models.Outlet).filter(models.Outlet.tenant_id == tenant_id).first()
+        if first_outlet:
+            outlet_id = first_outlet.id
+
+    products = db.query(models.Product).filter(
+        models.Product.tenant_id == tenant_id
+    ).order_by(models.Product.id.asc()).all()
+    
+    # Dynamically inject stock information from Inventory
+    for p in products:
+        p.stock = 0
+        p.online = 0
+        if outlet_id:
+            inv = db.query(models.Inventory).filter(
+                models.Inventory.product_id == p.id,
+                models.Inventory.outlet_id == outlet_id
+            ).first()
+            if inv:
+                p.stock = inv.stock
+                p.online = inv.online_stock
+                
+    return products
 
 @app.post("/api/products", response_model=schemas.ProductOut)
-def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
-    db_prod = db.query(models.Product).filter(models.Product.sku == product.sku).first()
+def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    outlet_id = tenant_ctx["outlet_id"]
+    
+    if not outlet_id:
+        first_outlet = db.query(models.Outlet).filter(models.Outlet.tenant_id == tenant_id).first()
+        if first_outlet:
+            outlet_id = first_outlet.id
+
+    db_prod = db.query(models.Product).filter(
+        models.Product.sku == product.sku,
+        models.Product.tenant_id == tenant_id
+    ).first()
     if db_prod:
         raise HTTPException(status_code=400, detail="Product with this SKU already exists")
-    new_prod = models.Product(**product.dict())
+    
+    prod_data = product.dict()
+    stock = prod_data.pop("stock", 0)
+    online = prod_data.pop("online", 0)
+    
+    new_prod = models.Product(**prod_data)
+    new_prod.tenant_id = tenant_id
     db.add(new_prod)
     db.commit()
     db.refresh(new_prod)
+    
+    # Create Inventory record for the active outlet
+    if outlet_id:
+        inv = models.Inventory(
+            outlet_id=outlet_id,
+            product_id=new_prod.id,
+            stock=stock,
+            online_stock=online
+        )
+        db.add(inv)
+        db.commit()
+        
+    new_prod.stock = stock
+    new_prod.online = online
     return new_prod
 
 @app.put("/api/products/{product_id}", response_model=schemas.ProductOut)
-def update_product(product_id: int, product: schemas.ProductUpdate, db: Session = Depends(get_db)):
-    db_prod = db.query(models.Product).filter(models.Product.id == product_id).first()
+def update_product(product_id: int, product: schemas.ProductUpdate, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    outlet_id = tenant_ctx["outlet_id"]
+    
+    if not outlet_id:
+        first_outlet = db.query(models.Outlet).filter(models.Outlet.tenant_id == tenant_id).first()
+        if first_outlet:
+            outlet_id = first_outlet.id
+
+    db_prod = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.tenant_id == tenant_id
+    ).first()
     if not db_prod:
         raise HTTPException(status_code=404, detail="Product not found")
     
     update_data = product.dict(exclude_unset=True)
+    stock = update_data.pop("stock", None)
+    online = update_data.pop("online", None)
+    
     for key, value in update_data.items():
         setattr(db_prod, key, value)
     
     db.commit()
-    db.refresh(db_prod)
+    
+    # Update inventory for the active outlet if stock or online is passed
+    if outlet_id and (stock is not None or online is not None):
+        inv = db.query(models.Inventory).filter(
+            models.Inventory.product_id == product_id,
+            models.Inventory.outlet_id == outlet_id
+        ).first()
+        if not inv:
+            inv = models.Inventory(
+                product_id=product_id,
+                outlet_id=outlet_id,
+                stock=0,
+                online_stock=0
+            )
+            db.add(inv)
+        if stock is not None:
+            inv.stock = stock
+        if online is not None:
+            inv.online_stock = online
+        db.commit()
+        
+    # Set return parameters
+    db_prod.stock = 0
+    db_prod.online = 0
+    if outlet_id:
+        inv = db.query(models.Inventory).filter(
+            models.Inventory.product_id == product_id,
+            models.Inventory.outlet_id == outlet_id
+        ).first()
+        if inv:
+            db_prod.stock = inv.stock
+            db_prod.online = inv.online_stock
+            
     return db_prod
 
 @app.delete("/api/products/{product_id}")
-def delete_product(product_id: int, db: Session = Depends(get_db)):
-    db_prod = db.query(models.Product).filter(models.Product.id == product_id).first()
+def delete_product(product_id: int, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    db_prod = db.query(models.Product).filter(
+        models.Product.id == product_id,
+        models.Product.tenant_id == tenant_id
+    ).first()
     if not db_prod:
         raise HTTPException(status_code=404, detail="Product not found")
+        
+    # Clean up associated inventory records
+    db.query(models.Inventory).filter(models.Inventory.product_id == product_id).delete()
+    
     db.delete(db_prod)
     db.commit()
     return {"detail": "Product deleted successfully"}
 
 # --- Stores API ---
 @app.get("/api/stores", response_model=List[schemas.StoreOut])
-def get_stores(db: Session = Depends(get_db)):
-    return db.query(models.Store).all()
+def get_stores(db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    return db.query(models.Store).filter(models.Store.tenant_id == tenant_id).all()
 
 @app.get("/api/stores/{slug}", response_model=schemas.StoreOut)
-def get_store_by_slug(slug: str, db: Session = Depends(get_db)):
-    db_store = db.query(models.Store).filter(models.Store.slug == slug).first()
+def get_store_by_slug(slug: str, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    db_store = db.query(models.Store).filter(
+        models.Store.slug == slug,
+        models.Store.tenant_id == tenant_id
+    ).first()
     if not db_store:
         raise HTTPException(status_code=404, detail="Store not found")
     return db_store
 
 # --- Orders API ---
 @app.get("/api/orders", response_model=List[schemas.OrderOut])
-def get_orders(db: Session = Depends(get_db)):
-    return db.query(models.Order).order_by(models.Order.created_at.desc()).all()
+def get_orders(db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    return db.query(models.Order).filter(
+        models.Order.tenant_id == tenant_id
+    ).order_by(models.Order.created_at.desc()).all()
 
 @app.get("/api/orders/{order_id}", response_model=schemas.OrderOut)
-def get_order_by_id(order_id: str, db: Session = Depends(get_db)):
+def get_order_by_id(order_id: str, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
     db_order = db.query(models.Order).filter(
+        models.Order.tenant_id == tenant_id
+    ).filter(
         (models.Order.id.ilike(order_id)) | 
         (models.Order.tracking_number.ilike(order_id))
     ).first()
@@ -184,9 +338,22 @@ def get_order_by_id(order_id: str, db: Session = Depends(get_db)):
     return db_order
 
 @app.post("/api/orders", response_model=schemas.OrderOut)
-def create_order(order_in: schemas.OrderCreate, db: Session = Depends(get_db)):
+def create_order(order_in: schemas.OrderCreate, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    branch_id = tenant_ctx["branch_id"]
+    outlet_id = tenant_ctx["outlet_id"]
+    
+    if not outlet_id:
+        first_outlet = db.query(models.Outlet).filter(models.Outlet.tenant_id == tenant_id).first()
+        if first_outlet:
+            outlet_id = first_outlet.id
+            branch_id = first_outlet.branch_id
+
     # Retrieve store metadata
-    db_store = db.query(models.Store).filter(models.Store.slug == order_in.store_slug).first()
+    db_store = db.query(models.Store).filter(
+        models.Store.slug == order_in.store_slug,
+        models.Store.tenant_id == tenant_id
+    ).first()
     if not db_store:
         raise HTTPException(status_code=404, detail="Store not found")
 
@@ -198,7 +365,10 @@ def create_order(order_in: schemas.OrderCreate, db: Session = Depends(get_db)):
     order_items = []
     
     for item in order_in.items:
-        db_prod = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+        db_prod = db.query(models.Product).filter(
+            models.Product.id == item.product_id,
+            models.Product.tenant_id == tenant_id
+        ).first()
         if not db_prod:
             raise HTTPException(status_code=400, detail=f"Product with ID {item.product_id} not found")
         
@@ -209,13 +379,16 @@ def create_order(order_in: schemas.OrderCreate, db: Session = Depends(get_db)):
         
         subtotal += item_price * item.qty
         
-        # Deduct stock
-        if db_prod.stock < item.qty:
+        # Deduct stock from Inventory (outlet-level stock tracking)
+        inv = db.query(models.Inventory).filter(
+            models.Inventory.product_id == db_prod.id,
+            models.Inventory.outlet_id == outlet_id
+        ).first()
+        if not inv or inv.stock < item.qty:
             raise HTTPException(status_code=400, detail=f"Insufficient stock for product: {db_prod.name}")
-        db_prod.stock -= item.qty
-        db_prod.online = max(0, db_prod.online - item.qty)
-        if db_prod.stock <= 0:
-            db_prod.status = "out"
+        
+        inv.stock -= item.qty
+        inv.online_stock = max(0, inv.online_stock - item.qty)
         db_prod.sold += item.qty
 
         order_items.append(models.OrderItem(
@@ -226,52 +399,29 @@ def create_order(order_in: schemas.OrderCreate, db: Session = Depends(get_db)):
 
     total = subtotal + order_in.shipping_cost
 
-    # Payment Status & Order Status details
-    # COD starts as paid/processing or pending? In COD, payment is pending. QRIS/VA is pending_payment.
     payment_status = "pending"
     order_status = "pending_payment"
     if order_in.payment_method == "COD (Bayar di Tempat)":
         order_status = "pending_payment"
         payment_status = "pending"
 
-    # Set estimated delivery
-    # Grab/GoSend = instant (1-2 hours)
-    # JNE/J&T/SiCepat = 2-3 days
     now = datetime.datetime.now()
     if "instant" in order_in.shipping_method.lower() or "same day" in order_in.shipping_method.lower():
         est_delivery = (now + datetime.timedelta(hours=6)).strftime("%d %b %Y, %H:%M")
     else:
         est_delivery = (now + datetime.timedelta(days=3)).strftime("%d %b %Y")
 
-    # ─── Payment Gateway API Integration Readiness ───
-    # If the payment method is not COD, simulate/setup Xendit or Midtrans API integrations.
     payment_token = None
     payment_url = None
     if order_in.payment_method != "COD (Bayar di Tempat)":
-        # Simulate a transaction token/invoice URL from payment gateway.
-        # In a production environment, you would call Xendit or Midtrans API here:
-        #
-        # EXAMPLE MIDTRANS INTEGRATION:
-        # import midtransclient
-        # snap = midtransclient.Snap(is_production=False, server_key="YOUR_MIDTRANS_SERVER_KEY")
-        # transaction = snap.create_transaction({
-        #     "transaction_details": {
-        #         "order_id": order_id,
-        #         "gross_amount": int(total)
-        #     },
-        #     "customer_details": {
-        #         "first_name": order_in.customer_name,
-        #         "phone": order_in.customer_phone
-        #     }
-        # })
-        # payment_token = transaction['token']
-        # payment_url = transaction['redirect_url']
-        #
         payment_token = f"snap-token-{order_id}-{random.randint(1000, 9999)}"
         payment_url = f"https://checkout.stripe.com/pay/mock-{order_id}"
 
     new_order = models.Order(
         id=order_id,
+        tenant_id=tenant_id,
+        branch_id=branch_id,
+        outlet_id=outlet_id,
         store_name=db_store.name,
         store_slug=db_store.slug,
         customer_name=order_in.customer_name,
@@ -318,37 +468,18 @@ def create_order(order_in: schemas.OrderCreate, db: Session = Depends(get_db)):
 def get_shipping_rates(req: schemas.ShippingRateRequest):
     # Calculate mock weight based on items (default 1 kg per item)
     total_qty = sum(item.qty for item in req.items)
-    weight_grams = total_qty * 1000  # 1000g per item
+    weight_grams = total_qty * 1000
     
-    # In a production environment, you would call RajaOngkir or Biteship API here:
-    #
-    # EXAMPLE BITESHIP INTEGRATION:
-    # import requests
-    # url = "https://api.biteship.com/v1/rates"
-    # headers = {"Authorization": "Bearer YOUR_BITESHIP_API_KEY", "Content-Type": "application/json"}
-    # payload = {
-    #     "origin_postal_code": "12120", # Gudang asal
-    #     "destination_postal_code": "60234", # Kode pos pembeli
-    #     "couriers": "jne,tiki,sicepat,gojek,grab",
-    #     "items": [{"name": "Product Weight", "value": weight_grams, "quantity": 1}]
-    # }
-    # response = requests.post(url, json=payload, headers=headers).json()
-    # ... map response to output format ...
-
-    # We simulate rates based on the destination city string:
     is_jabodetabek = any(keyword in req.city.lower() for keyword in ["jakarta", "bogor", "depok", "tangerang", "bekasi", "jabar"])
     
     options = []
-    
     if is_jabodetabek:
-        # Offer local instant/sameday options
         options.append(schemas.ShippingOptionOut(id="gosend-instant", name="GoSend Instant", courier="Gojek", type="Instant", price=15000 + (weight_grams / 1000) * 5000, eta="1-2 jam", popular=True))
         options.append(schemas.ShippingOptionOut(id="grab-instant", name="GrabExpress Instant", courier="Grab", type="Instant", price=14000 + (weight_grams / 1000) * 5000, eta="1-2 jam"))
         options.append(schemas.ShippingOptionOut(id="gosend-sameday", name="GoSend Same Day", courier="Gojek", type="Same Day", price=10000 + (weight_grams / 1000) * 2000, eta="6-8 jam"))
         options.append(schemas.ShippingOptionOut(id="jne-reg", name="JNE Reguler (REG)", courier="JNE", type="Reguler", price=9000, eta="1-2 hari"))
         options.append(schemas.ShippingOptionOut(id="sicepat-reg", name="SiCepat REG", courier="SiCepat", type="Reguler", price=8000, eta="1-2 hari"))
     else:
-        # Outside Jabodetabek, offer standard couriers only
         options.append(schemas.ShippingOptionOut(id="jne-reg", name="JNE Reguler (REG)", courier="JNE", type="Reguler", price=15000 + (weight_grams / 1000) * 3000, eta="2-3 hari", popular=True))
         options.append(schemas.ShippingOptionOut(id="jnt-ez", name="J&T Express EZ", courier="J&T", type="Reguler", price=14000 + (weight_grams / 1000) * 3000, eta="2-3 hari"))
         options.append(schemas.ShippingOptionOut(id="sicepat-reg", name="SiCepat REG", courier="SiCepat", type="Reguler", price=13000 + (weight_grams / 1000) * 3000, eta="2-3 hari"))
@@ -357,8 +488,12 @@ def get_shipping_rates(req: schemas.ShippingRateRequest):
     return options
 
 @app.put("/api/orders/{order_id}/status", response_model=schemas.OrderOut)
-def update_order_status(order_id: str, status_update: schemas.OrderUpdateStatus, db: Session = Depends(get_db)):
-    db_order = db.query(models.Order).filter(models.Order.id == order_id).first()
+def update_order_status(order_id: str, status_update: schemas.OrderUpdateStatus, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    db_order = db.query(models.Order).filter(
+        models.Order.id == order_id,
+        models.Order.tenant_id == tenant_id
+    ).first()
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -371,7 +506,6 @@ def update_order_status(order_id: str, status_update: schemas.OrderUpdateStatus,
     if status_update.status == "paid":
         db_order.payment_status = "paid"
 
-    # Add tracking event
     labels = {
         "pending_payment": ("Pesanan Dibuat", "Menunggu konfirmasi pembayaran"),
         "paid": ("Pembayaran Diterima", "Pembayaran terverifikasi oleh sistem"),
@@ -402,20 +536,27 @@ def update_order_status(order_id: str, status_update: schemas.OrderUpdateStatus,
 
 # --- Leads API ---
 @app.get("/api/leads", response_model=List[schemas.LeadOut])
-def get_leads(db: Session = Depends(get_db)):
-    return db.query(models.Lead).all()
+def get_leads(db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    return db.query(models.Lead).filter(models.Lead.tenant_id == tenant_id).all()
 
 @app.post("/api/leads", response_model=schemas.LeadOut)
-def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db)):
+def create_lead(lead: schemas.LeadCreate, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
     new_lead = models.Lead(**lead.dict())
+    new_lead.tenant_id = tenant_id
     db.add(new_lead)
     db.commit()
     db.refresh(new_lead)
     return new_lead
 
 @app.put("/api/leads/{lead_id}", response_model=schemas.LeadOut)
-def update_lead(lead_id: int, lead_update: schemas.LeadUpdate, db: Session = Depends(get_db)):
-    db_lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+def update_lead(lead_id: int, lead_update: schemas.LeadUpdate, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    db_lead = db.query(models.Lead).filter(
+        models.Lead.id == lead_id,
+        models.Lead.tenant_id == tenant_id
+    ).first()
     if not db_lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
@@ -427,8 +568,12 @@ def update_lead(lead_id: int, lead_update: schemas.LeadUpdate, db: Session = Dep
     return db_lead
 
 @app.delete("/api/leads/{lead_id}")
-def delete_lead(lead_id: int, db: Session = Depends(get_db)):
-    db_lead = db.query(models.Lead).filter(models.Lead.id == lead_id).first()
+def delete_lead(lead_id: int, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    db_lead = db.query(models.Lead).filter(
+        models.Lead.id == lead_id,
+        models.Lead.tenant_id == tenant_id
+    ).first()
     if not db_lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     db.delete(db_lead)
@@ -437,20 +582,27 @@ def delete_lead(lead_id: int, db: Session = Depends(get_db)):
 
 # --- Agents API ---
 @app.get("/api/agents", response_model=List[schemas.AgentOut])
-def get_agents(db: Session = Depends(get_db)):
-    return db.query(models.Agent).all()
+def get_agents(db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    return db.query(models.Agent).filter(models.Agent.tenant_id == tenant_id).all()
 
 @app.post("/api/agents", response_model=schemas.AgentOut)
-def create_agent(agent: schemas.AgentCreate, db: Session = Depends(get_db)):
+def create_agent(agent: schemas.AgentCreate, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
     new_agent = models.Agent(**agent.dict())
+    new_agent.tenant_id = tenant_id
     db.add(new_agent)
     db.commit()
     db.refresh(new_agent)
     return new_agent
 
 @app.put("/api/agents/{agent_id}", response_model=schemas.AgentOut)
-def update_agent(agent_id: int, agent_update: schemas.AgentUpdate, db: Session = Depends(get_db)):
-    db_agent = db.query(models.Agent).filter(models.Agent.id == agent_id).first()
+def update_agent(agent_id: int, agent_update: schemas.AgentUpdate, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    db_agent = db.query(models.Agent).filter(
+        models.Agent.id == agent_id,
+        models.Agent.tenant_id == tenant_id
+    ).first()
     if not db_agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
@@ -465,20 +617,27 @@ def update_agent(agent_id: int, agent_update: schemas.AgentUpdate, db: Session =
 
 # --- KB Files API ---
 @app.get("/api/kb-files", response_model=List[schemas.KBFileOut])
-def get_kb_files(db: Session = Depends(get_db)):
-    return db.query(models.KBFile).all()
+def get_kb_files(db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    return db.query(models.KBFile).filter(models.KBFile.tenant_id == tenant_id).all()
 
 @app.post("/api/kb-files", response_model=schemas.KBFileOut)
-def create_kb_file(kb_file: schemas.KBFileCreate, db: Session = Depends(get_db)):
+def create_kb_file(kb_file: schemas.KBFileCreate, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
     new_file = models.KBFile(**kb_file.dict())
+    new_file.tenant_id = tenant_id
     db.add(new_file)
     db.commit()
     db.refresh(new_file)
     return new_file
 
 @app.delete("/api/kb-files/{file_id}")
-def delete_kb_file(file_id: int, db: Session = Depends(get_db)):
-    db_file = db.query(models.KBFile).filter(models.KBFile.id == file_id).first()
+def delete_kb_file(file_id: int, db: Session = Depends(get_db), tenant_ctx: dict = Depends(get_tenant_context)):
+    tenant_id = tenant_ctx["tenant_id"]
+    db_file = db.query(models.KBFile).filter(
+        models.KBFile.id == file_id,
+        models.KBFile.tenant_id == tenant_id
+    ).first()
     if not db_file:
         raise HTTPException(status_code=404, detail="File metadata not found")
     db.delete(db_file)
