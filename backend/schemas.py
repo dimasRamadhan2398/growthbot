@@ -1,6 +1,52 @@
 from pydantic import BaseModel
 from typing import List, Optional
 
+# --- Tenant ---
+class TenantBase(BaseModel):
+    id: str
+    name: str
+    subdomain: str
+    subscription_plan: str
+    is_active: bool = True
+    created_at: str
+
+class TenantCreate(TenantBase):
+    pass
+
+class TenantOut(TenantBase):
+    class Config:
+        from_attributes = True
+
+# --- Branch ---
+class BranchBase(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    manager_name: Optional[str] = None
+    region: Optional[str] = None
+    phone: Optional[str] = None
+
+class BranchCreate(BranchBase):
+    pass
+
+class BranchOut(BranchBase):
+    class Config:
+        from_attributes = True
+
+# --- Outlet ---
+class OutletBase(BaseModel):
+    id: str
+    branch_id: str
+    tenant_id: str
+    name: str
+
+class OutletCreate(OutletBase):
+    pass
+
+class OutletOut(OutletBase):
+    class Config:
+        from_attributes = True
+
 # --- Category ---
 class CategoryBase(BaseModel):
     id: str
@@ -14,6 +60,7 @@ class CategoryCreate(CategoryBase):
     pass
 
 class CategoryOut(CategoryBase):
+    tenant_id: str
     class Config:
         from_attributes = True
 
@@ -32,6 +79,7 @@ class StoreCreate(StoreBase):
     pass
 
 class StoreOut(StoreBase):
+    tenant_id: str
     class Config:
         from_attributes = True
 
@@ -40,8 +88,6 @@ class ProductBase(BaseModel):
     name: str
     sku: str
     price: float
-    stock: int = 0
-    online: int = 0
     status: str = "synced"
     img: Optional[str] = None
     rating: float = 0.0
@@ -59,8 +105,6 @@ class ProductUpdate(BaseModel):
     name: Optional[str] = None
     sku: Optional[str] = None
     price: Optional[float] = None
-    stock: Optional[int] = None
-    online: Optional[int] = None
     status: Optional[str] = None
     img: Optional[str] = None
     rating: Optional[float] = None
@@ -72,6 +116,24 @@ class ProductUpdate(BaseModel):
     ch_pos: Optional[bool] = None
 
 class ProductOut(ProductBase):
+    id: int
+    tenant_id: str
+    class Config:
+        from_attributes = True
+
+# --- Inventory ---
+class InventoryBase(BaseModel):
+    tenant_id: str
+    branch_id: str
+    outlet_id: str
+    product_id: int
+    stock: int = 0
+    online: int = 0
+
+class InventoryCreate(InventoryBase):
+    pass
+
+class InventoryOut(InventoryBase):
     id: int
     class Config:
         from_attributes = True
@@ -148,6 +210,9 @@ class OrderUpdateStatus(BaseModel):
     tracking_number: Optional[str] = None
 
 class OrderOut(OrderBase):
+    tenant_id: str
+    branch_id: Optional[str] = None
+    outlet_id: Optional[str] = None
     items: List[OrderItemOut] = []
     tracking_events: List[TrackingEventOut] = []
     class Config:
@@ -170,6 +235,7 @@ class LeadUpdate(BaseModel):
 
 class LeadOut(LeadBase):
     id: int
+    tenant_id: str
     class Config:
         from_attributes = True
 
@@ -190,6 +256,7 @@ class AgentUpdate(BaseModel):
 
 class AgentOut(AgentBase):
     id: int
+    tenant_id: str
     class Config:
         from_attributes = True
 
@@ -204,6 +271,7 @@ class KBFileCreate(KBFileBase):
 
 class KBFileOut(KBFileBase):
     id: int
+    tenant_id: str
     class Config:
         from_attributes = True
 
