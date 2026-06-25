@@ -2,8 +2,9 @@ import { createRouter, createWebHistory } from "vue-router";
 import AppLayout from "./components/AppLayout.vue";
 
 const routes = [
+  // Multi-tenant, multi-branch nested routes
   {
-    path: "/",
+    path: "/:industry/:branchId/:outletId",
     component: AppLayout,
     children: [
       {
@@ -47,6 +48,11 @@ const routes = [
         component: () => import("./pages/Orders.vue"),
       },
     ],
+  },
+  // We keep the old base route for backward compatibility or default redirect
+  {
+    path: "/",
+    redirect: "/FnB/east-jakarta/outlet-east-1"
   },
   {
     path: "/store/:storeName",
