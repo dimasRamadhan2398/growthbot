@@ -62,6 +62,8 @@ class Product(Base):
     name = Column(String, nullable=False)
     sku = Column(String, nullable=False, unique=True)
     price = Column(Float, nullable=False)
+    stock = Column(Integer, default=0)
+    online = Column(Integer, default=0)
     status = Column(String, default="synced") # synced, syncing, out
     img = Column(Text, nullable=True) # base64 or URL or path
     rating = Column(Float, default=0.0)

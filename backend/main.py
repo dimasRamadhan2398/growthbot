@@ -57,6 +57,15 @@ def require_tenant_id(
 def health_check():
     return {"status": "healthy", "time": datetime.datetime.utcnow().isoformat()}
 
+# --- Tenant API ---
+@app.get("/api/tenants/validate/{subdomain}", response_model=schemas.TenantOut)
+def validate_tenant_subdomain(subdomain: str, db: Session = Depends(get_db)):
+    tenant = db.query(models.Tenant).filter(models.Tenant.subdomain == subdomain).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return tenant
+
+
 # --- Dashboard API ---
 @app.get("/api/dashboard")
 def get_dashboard_data(

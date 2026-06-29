@@ -1,24 +1,37 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import axios from 'axios';
 
 export const useTenantStore = defineStore('tenant', () => {
   const currentTenantId = ref<string | null>(null);
   const currentIndustry = ref<string | null>(null);
   const currentBranchId = ref<string | null>(null);
   const currentOutletId = ref<string | null>(null);
+  const isReady = ref<boolean>(false);
 
-  function resolveTenantFromUrl() {
+  async function resolveTenantFromUrl() {
     // Expected Subdomain logic for Tenant
     // e.g., brand-a.domain.com -> tenant 'brand-a'
     const hostname = window.location.hostname;
     // Example logic: if localhost, might be hard to test subdomain without hosts file,
     // but in prod it extracts the first part. Let's do a simple split.
     const parts = hostname.split('.');
+    let subdomainCandidate: string | null = null;
+
     if (parts.length >= 3 || (parts.length >= 2 && !hostname.includes('localhost'))) {
-        currentTenantId.value = parts[0];
+        subdomainCandidate = parts[0];
+    }
+
+    if (subdomainCandidate) {
+        try {
+            // Validate the subdomain against the backend
+            const response = await axios.get(`/api/tenants/validate/${subdomainCandidate}`);
+            currentTenantId.value = response.data.id;
+        } catch (error) {
+            console.warn(`Subdomain '${subdomainCandidate}' not found. Using fallback tenant.`);
+            currentTenantId.value = "myfriedchicken"; // fallback default
+        }
     } else {
-        // Fallback for local dev if no subdomain is present
-        // Or could be extracted from path if desired, but user said "use subdomain using tenant name"
         currentTenantId.value = "myfriedchicken"; // fallback default
     }
 
@@ -39,6 +52,8 @@ export const useTenantStore = defineStore('tenant', () => {
       currentBranchId.value = "east-jakarta";
       currentOutletId.value = "outlet-east-1";
     }
+
+    isReady.value = true;
   }
 
   return {
@@ -46,6 +61,7 @@ export const useTenantStore = defineStore('tenant', () => {
     currentIndustry,
     currentBranchId,
     currentOutletId,
+    isReady,
     resolveTenantFromUrl
   };
 });

@@ -88,6 +88,8 @@ class ProductBase(BaseModel):
     name: str
     sku: str
     price: float
+    stock: int = 0
+    online: int = 0
     status: str = "synced"
     img: Optional[str] = None
     rating: float = 0.0
@@ -105,6 +107,8 @@ class ProductUpdate(BaseModel):
     name: Optional[str] = None
     sku: Optional[str] = None
     price: Optional[float] = None
+    stock: Optional[int] = None
+    online: Optional[int] = None
     status: Optional[str] = None
     img: Optional[str] = None
     rating: Optional[float] = None

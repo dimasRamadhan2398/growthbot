@@ -16,7 +16,6 @@ app.use(pinia);
 
 // Resolve tenant and branch immediately upon load
 const tenantStore = useTenantStore();
-tenantStore.resolveTenantFromUrl();
 
 // Setup Axios Interceptors
 axios.interceptors.request.use((config) => {
@@ -35,4 +34,8 @@ axios.interceptors.request.use((config) => {
 });
 
 app.use(router);
-app.mount("#app");
+
+// Wait for tenant resolution before mounting to prevent race conditions
+tenantStore.resolveTenantFromUrl().then(() => {
+  app.mount("#app");
+});
