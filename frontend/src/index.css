@@ -108,36 +108,3 @@
     @apply flex flex-col gap-3 rounded-xl bg-muted/50 p-4 min-w-[280px];
   }
 }
-
-/* FnB: Yellow-Brown-Red color palette */
-.theme-fnb {
-  --primary: 32 95% 45%; /* Orange/Brownish-Red */
-  --primary-foreground: 0 0% 100%;
-  --accent: 45 90% 90%; /* Yellowish */
-  --accent-foreground: 24 85% 35%; /* Brownish Red */
-  --sidebar-primary: 32 95% 50%;
-  --sidebar-accent: 25 30% 20%;
-  --ring: 32 95% 45%;
-}
-
-/* Retail: Red color palette */
-.theme-retail {
-  --primary: 0 84% 50%; /* Pure Red */
-  --primary-foreground: 0 0% 100%;
-  --accent: 0 84% 95%; /* Light Red */
-  --accent-foreground: 0 84% 40%;
-  --sidebar-primary: 0 84% 55%;
-  --sidebar-accent: 0 20% 18%;
-  --ring: 0 84% 50%;
-}
-
-/* Services: Blue color palette */
-.theme-services {
-  --primary: 217 91% 55%; /* Blue */
-  --primary-foreground: 0 0% 100%;
-  --accent: 217 91% 95%; /* Light Blue */
-  --accent-foreground: 217 91% 40%;
-  --sidebar-primary: 217 91% 60%;
-  --sidebar-accent: 217 30% 18%;
-  --ring: 217 91% 55%;
-}

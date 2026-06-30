@@ -1,42 +1,87 @@
-version: "3.8"
+version: '3.8'
+
 services:
   db:
     image: postgres:16-alpine
-    container_name: humaispace_db
-    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: humaispace
     ports:
-      - "${DB_PORT}:5432"
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/init_scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  backend:
+  gateway:
+    image: nginx:alpine
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/gateway/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - tenant_service
+      - catalog_service
+      - order_service
+      - crm_service
+      - kb_service
+
+  tenant_service:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    container_name: humaispace_backend
-    restart: unless-stopped
-    ports:
-      - "${BACKEND_PORT}:8000"
+      dockerfile: Dockerfile.tenant
     environment:
-      # URL Database dirakit otomatis menggunakan variabel dari .env
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/tenant_db
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
-  web:
+  catalog_service:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: humaispace_web
-    restart: unless-stopped
-    ports:
-      - "${WEB_PORT}:80"
+      context: ./backend
+      dockerfile: Dockerfile.catalog
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/catalog_db
     depends_on:
-      - backend
+      db:
+        condition: service_healthy
+
+  order_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.order
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/order_db
+      - TENANT_SERVICE_URL=http://tenant_service:8001
+      - CATALOG_SERVICE_URL=http://catalog_service:8002
+    depends_on:
+      db:
+        condition: service_healthy
+
+  crm_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.crm
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/crm_db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  kb_service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.kb
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/kb_db
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
-  postgres_data:
+  pgdata:
