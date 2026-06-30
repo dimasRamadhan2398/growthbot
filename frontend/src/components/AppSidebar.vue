@@ -28,7 +28,7 @@
     <div class="flex-1 overflow-y-auto py-3">
       <nav class="px-2 space-y-1">
         <router-link
-          v-for="item in navItems"
+          v-for="item in computedNavItems"
           :key="item.title"
           :to="item.url"
           v-slot="{ isActive }"
@@ -63,6 +63,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
 import {
   LayoutDashboard,
   GraduationCap,
@@ -79,14 +81,23 @@ defineProps<{
   isCollapsed: boolean;
 }>();
 
-const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "AI Academy", url: "/academy", icon: GraduationCap },
-  { title: "Webstore & POS", url: "/webstore", icon: Store },
-  { title: "My AI Agents", url: "/agents", icon: Bot },
-  { title: "Pesanan", url: "/orders", icon: Package },
-  { title: "Lead CRM", url: "/crm", icon: Users },
-  { title: "Referral Hub", url: "/referrals", icon: Gift },
-  { title: "Billing & Usage", url: "/billing", icon: CreditCard },
-];
+const route = useRoute();
+
+const computedNavItems = computed(() => {
+  const industry = route.params.industry || "Retail";
+  const branch = route.params.branch || "branch_retail_1";
+  const outlet = route.params.outlet || "outlet_retail_1";
+  const prefix = `/${industry}/${branch}/${outlet}`;
+
+  return [
+    { title: "Dashboard", url: `${prefix}`, icon: LayoutDashboard },
+    { title: "AI Academy", url: `${prefix}/academy`, icon: GraduationCap },
+    { title: "Webstore & POS", url: `${prefix}/webstore`, icon: Store },
+    { title: "My AI Agents", url: `${prefix}/agents`, icon: Bot },
+    { title: "Pesanan", url: `${prefix}/orders`, icon: Package },
+    { title: "Lead CRM", url: `${prefix}/crm`, icon: Users },
+    { title: "Referral Hub", url: `${prefix}/referrals`, icon: Gift },
+    { title: "Billing & Usage", url: `${prefix}/billing`, icon: CreditCard },
+  ];
+});
 </script>

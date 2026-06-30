@@ -5,12 +5,13 @@ from database import Base
 class Tenant(Base):
     __tablename__ = "tenants"
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True, index=True) # subdomain or unique ID
     name = Column(String, nullable=False)
-    subdomain = Column(String, unique=True, nullable=False)
+    subdomain = Column(String, unique=True, index=True, nullable=False)
     subscription_plan = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(String, nullable=False)
+
 
 class Branch(Base):
     __tablename__ = "branches"
@@ -18,9 +19,10 @@ class Branch(Base):
     id = Column(String, primary_key=True, index=True)
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False)
     name = Column(String, nullable=False)
-    manager_name = Column(String, nullable=True)
-    region = Column(String, nullable=True)
-    phone = Column(String, nullable=True)
+    manager_name = Column(String, nullable=False)
+    region = Column(String, nullable=False)
+    phone = Column(String, nullable=False)
+
 
 class Outlet(Base):
     __tablename__ = "outlets"
@@ -29,6 +31,7 @@ class Outlet(Base):
     branch_id = Column(String, ForeignKey("branches.id"), nullable=False)
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False)
     name = Column(String, nullable=False)
+
 
 class Category(Base):
     __tablename__ = "categories"
@@ -40,6 +43,7 @@ class Category(Base):
     webstore = Column(Boolean, default=True)
     reseller = Column(Boolean, default=True)
     pos = Column(Boolean, default=True)
+
 
 class Store(Base):
     __tablename__ = "stores"
@@ -53,6 +57,7 @@ class Store(Base):
     tagline = Column(String, nullable=False)
     is_reseller = Column(Boolean, default=False)
     markup = Column(Float, default=0.0)
+
 
 class Product(Base):
     __tablename__ = "products"
@@ -74,24 +79,24 @@ class Product(Base):
     ch_reseller = Column(Boolean, default=True)
     ch_pos = Column(Boolean, default=True)
 
+
 class Inventory(Base):
-    __tablename__ = "inventory"
+    __tablename__ = "inventories"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False)
-    branch_id = Column(String, ForeignKey("branches.id"), nullable=False)
     outlet_id = Column(String, ForeignKey("outlets.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     stock = Column(Integer, default=0)
-    online = Column(Integer, default=0)
+    online_stock = Column(Integer, default=0)
+
 
 class Order(Base):
     __tablename__ = "orders"
 
     id = Column(String, primary_key=True, index=True) # e.g. ORD-2026041301
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False)
-    branch_id = Column(String, nullable=True)
-    outlet_id = Column(String, nullable=True)
+    branch_id = Column(String, ForeignKey("branches.id"), nullable=True)
+    outlet_id = Column(String, ForeignKey("outlets.id"), nullable=True)
     store_name = Column(String, nullable=False)
     store_slug = Column(String, nullable=False)
     customer_name = Column(String, nullable=False)
@@ -106,7 +111,7 @@ class Order(Base):
     tracking_number = Column(String, nullable=True)
     payment_method = Column(String, nullable=False)
     payment_status = Column(String, default="pending") # pending, paid, expired, refunded
-    status = Column(String, default="pending_payment") # pending_payment, paid, processing, shipped, in_transit, out_for_delivery, delivered, cancelled
+    status = Column(String, default="pending_payment") # pending_payment, paid, processing, shipped, etc.
     estimated_delivery = Column(String, nullable=True)
     created_at = Column(String, nullable=False)
     payment_url = Column(String, nullable=True)
@@ -114,6 +119,7 @@ class Order(Base):
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     tracking_events = relationship("TrackingEvent", back_populates="order", cascade="all, delete-orphan")
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"
@@ -125,6 +131,7 @@ class OrderItem(Base):
     price = Column(Float, nullable=False)
 
     order = relationship("Order", back_populates="items")
+
 
 class TrackingEvent(Base):
     __tablename__ = "tracking_events"
@@ -139,6 +146,7 @@ class TrackingEvent(Base):
 
     order = relationship("Order", back_populates="tracking_events")
 
+
 class Lead(Base):
     __tablename__ = "leads"
 
@@ -151,6 +159,7 @@ class Lead(Base):
     time = Column(String, nullable=False)
     column_name = Column(String, nullable=False) # New Lead, Qualified by AI, In Discussion, Closed
 
+
 class Agent(Base):
     __tablename__ = "agents"
 
@@ -160,7 +169,8 @@ class Agent(Base):
     status = Column(String, default="active") # active, paused
     messages = Column(Integer, default=0)
     channel = Column(String, nullable=False)
-    icon_name = Column(String, nullable=False) # MessageSquare, Headphones, ShoppingBag, HelpCircle, Package, Bot
+    icon_name = Column(String, nullable=False)
+
 
 class KBFile(Base):
     __tablename__ = "kb_files"

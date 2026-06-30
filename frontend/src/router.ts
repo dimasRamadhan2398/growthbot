@@ -1,10 +1,14 @@
 import { createRouter, createWebHistory } from "vue-router";
 import AppLayout from "./components/AppLayout.vue";
+import { updateTenantContext } from "./utils/tenant";
 
 const routes = [
-  // Multi-tenant, multi-branch nested routes
   {
-    path: "/:industry/:branchId/:outletId",
+    path: "/",
+    redirect: "/Retail/branch_retail_1/outlet_retail_1"
+  },
+  {
+    path: "/:industry/:branch/:outlet",
     component: AppLayout,
     children: [
       {
@@ -49,11 +53,6 @@ const routes = [
       },
     ],
   },
-  // We keep the old base route for backward compatibility or default redirect
-  {
-    path: "/",
-    redirect: "/FnB/east-jakarta/outlet-east-1"
-  },
   {
     path: "/store/:storeName",
     name: "PublicStorefront",
@@ -79,6 +78,16 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+});
+
+router.beforeEach((to, from, next) => {
+  const { industry, branch, outlet } = to.params;
+  updateTenantContext({
+    industry: Array.isArray(industry) ? industry[0] : industry,
+    branch: Array.isArray(branch) ? branch[0] : branch,
+    outlet: Array.isArray(outlet) ? outlet[0] : outlet,
+  });
+  next();
 });
 
 export default router;

@@ -22,9 +22,9 @@ class BranchBase(BaseModel):
     id: str
     tenant_id: str
     name: str
-    manager_name: Optional[str] = None
-    region: Optional[str] = None
-    phone: Optional[str] = None
+    manager_name: str
+    region: str
+    phone: str
 
 class BranchCreate(BranchBase):
     pass
@@ -47,6 +47,21 @@ class OutletOut(OutletBase):
     class Config:
         from_attributes = True
 
+# --- Inventory ---
+class InventoryBase(BaseModel):
+    outlet_id: str
+    product_id: int
+    stock: int = 0
+    online_stock: int = 0
+
+class InventoryCreate(InventoryBase):
+    pass
+
+class InventoryOut(InventoryBase):
+    id: int
+    class Config:
+        from_attributes = True
+
 # --- Category ---
 class CategoryBase(BaseModel):
     id: str
@@ -55,12 +70,12 @@ class CategoryBase(BaseModel):
     webstore: bool = True
     reseller: bool = True
     pos: bool = True
+    tenant_id: Optional[str] = None
 
 class CategoryCreate(CategoryBase):
     pass
 
 class CategoryOut(CategoryBase):
-    tenant_id: str
     class Config:
         from_attributes = True
 
@@ -74,12 +89,12 @@ class StoreBase(BaseModel):
     tagline: str
     is_reseller: bool = False
     markup: float = 0.0
+    tenant_id: Optional[str] = None
 
 class StoreCreate(StoreBase):
     pass
 
 class StoreOut(StoreBase):
-    tenant_id: str
     class Config:
         from_attributes = True
 
@@ -99,6 +114,7 @@ class ProductBase(BaseModel):
     ch_webstore: bool = True
     ch_reseller: bool = True
     ch_pos: bool = True
+    tenant_id: Optional[str] = None
 
 class ProductCreate(ProductBase):
     pass
@@ -120,24 +136,6 @@ class ProductUpdate(BaseModel):
     ch_pos: Optional[bool] = None
 
 class ProductOut(ProductBase):
-    id: int
-    tenant_id: str
-    class Config:
-        from_attributes = True
-
-# --- Inventory ---
-class InventoryBase(BaseModel):
-    tenant_id: str
-    branch_id: str
-    outlet_id: str
-    product_id: int
-    stock: int = 0
-    online: int = 0
-
-class InventoryCreate(InventoryBase):
-    pass
-
-class InventoryOut(InventoryBase):
     id: int
     class Config:
         from_attributes = True
@@ -196,6 +194,9 @@ class OrderBase(BaseModel):
     created_at: str
     payment_url: Optional[str] = None
     payment_token: Optional[str] = None
+    tenant_id: Optional[str] = None
+    branch_id: Optional[str] = None
+    outlet_id: Optional[str] = None
 
 class OrderCreate(BaseModel):
     store_slug: str
@@ -214,9 +215,6 @@ class OrderUpdateStatus(BaseModel):
     tracking_number: Optional[str] = None
 
 class OrderOut(OrderBase):
-    tenant_id: str
-    branch_id: Optional[str] = None
-    outlet_id: Optional[str] = None
     items: List[OrderItemOut] = []
     tracking_events: List[TrackingEventOut] = []
     class Config:
@@ -230,6 +228,7 @@ class LeadBase(BaseModel):
     value: str
     time: str
     column_name: str
+    tenant_id: Optional[str] = None
 
 class LeadCreate(LeadBase):
     pass
@@ -239,7 +238,6 @@ class LeadUpdate(BaseModel):
 
 class LeadOut(LeadBase):
     id: int
-    tenant_id: str
     class Config:
         from_attributes = True
 
@@ -250,6 +248,7 @@ class AgentBase(BaseModel):
     messages: int = 0
     channel: str
     icon_name: str
+    tenant_id: Optional[str] = None
 
 class AgentCreate(AgentBase):
     pass
@@ -260,7 +259,6 @@ class AgentUpdate(BaseModel):
 
 class AgentOut(AgentBase):
     id: int
-    tenant_id: str
     class Config:
         from_attributes = True
 
@@ -269,13 +267,13 @@ class KBFileBase(BaseModel):
     name: str
     size: str
     date: str
+    tenant_id: Optional[str] = None
 
 class KBFileCreate(KBFileBase):
     pass
 
 class KBFileOut(KBFileBase):
     id: int
-    tenant_id: str
     class Config:
         from_attributes = True
 
