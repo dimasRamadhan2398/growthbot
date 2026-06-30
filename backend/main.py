@@ -16,7 +16,7 @@ app = FastAPI(title="HumaiSpace AutoPilot API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Allow all origins for local development simplicity
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -24,7 +24,6 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_db():
     # Recreate tables to apply schema modifications cleanly
-    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
